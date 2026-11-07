@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Treino de notas no braço da guitarra</title>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@500;800&family=Figtree:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#f6f4ef;--ink:#1c2430;--mute:#6b7280;--card:#fff;--line:#d9d5ca;--board:#e8eef7;--fret:#2b3d5c;--note:#f59e0b;--noteink:#fff;--cur:#2563eb;--ok:#16a34a;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#14171c;--ink:#eef0f3;--mute:#9aa3b0;--card:#1e232b;--line:#333a45;--board:#222b3a;--fret:#8aa4d0}}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font-family:Figtree,system-ui,sans-serif;padding:16px;max-width:980px;margin:0 auto}
+h1{font-family:'Bricolage Grotesque',system-ui,sans-serif;font-weight:800;font-size:clamp(1.4rem,4vw,2rem);margin:4px 0 14px;letter-spacing:-.01em}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:12px}
+.lbl{color:var(--mute);font-size:.9rem;margin-right:2px}
+button{font:inherit;border:1px solid var(--line);background:var(--card);color:var(--ink);padding:8px 12px;border-radius:8px;cursor:pointer}
+button:focus-visible{outline:3px solid var(--cur);outline-offset:2px}
+button.on{background:var(--note);border-color:var(--note);color:#fff;font-weight:600}
+#mic{background:var(--cur);border-color:var(--cur);color:#fff;font-weight:600;padding:10px 18px}
+#mic.live{background:var(--ok);border-color:var(--ok)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px}
+.scroll{overflow-x:auto}
+svg{display:block;min-width:640px;width:100%;height:auto}
+.hear{display:flex;gap:18px;flex-wrap:wrap;align-items:center;margin-top:12px}
+#heard{font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:2.4rem;min-width:5ch}
+#target{font-size:1.05rem}
+.meter{height:8px;width:140px;background:var(--line);border-radius:4px;overflow:hidden}
+.meter i{display:block;height:100%;width:0;background:var(--ok)}
+#msg{color:var(--mute);font-size:.9rem;margin-top:8px;min-height:1.3em}
+.nm{cursor:pointer}
+@media (max-width:640px){body{padding:10px}#notes{display:grid;grid-template-columns:repeat(6,1fr);gap:6px;width:100%}#notes button{margin:0!important;padding:10px 0;min-height:44px}button{min-height:44px}.stats{gap:6px}.stats div{padding:6px 8px;font-size:.75rem}.stats b{font-size:1.2rem}.hear{position:sticky;bottom:0;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:8px 12px calc(8px + env(safe-area-inset-bottom,0px));gap:10px;margin-top:10px}#heard{font-size:1.8rem;min-width:3ch}.meter{width:80px}}
+.stats{display:flex;gap:10px;margin-bottom:12px}.stats div{flex:1;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:8px 10px;color:var(--mute);font-size:.85rem}.stats b{display:block;color:var(--ink);font-family:'Bricolage Grotesque',sans-serif;font-size:1.6rem}
+</style>
+</head>
+<body>
+<h1>Treino de notas no braço da guitarra</h1>
+
+<div class="row"><span class="lbl">Nota</span><span id="notes"></span></div>
+<div class="row"><span class="lbl">Treinar</span>
+  <button id="m1" class="on">Uma nota</button><button id="m2">Todas as notas</button>
+  <span class="lbl" style="margin-left:10px">Começa na</span>
+  <button id="d1" class="on">6ª → 1ª</button><button id="d2">1ª → 6ª</button>
+</div>
+<div class="row"><button id="mic">Ativar microfone</button><button id="reset">Reiniciar treino</button><button id="snd" class="on">Som ao clicar</button></div>
+
+<div class="stats"><div><b id="sc">0</b>Pontos</div><div><b id="st">0</b>Sequência</div><div><b id="ac">100%</b>Precisão</div><div><b id="bs">0</b>Recorde</div></div>
+<div class="card scroll"><svg id="neck" viewBox="0 0 760 260" role="img" aria-label="Braço da guitarra até a 12ª casa"></svg></div>
+
+<div class="hear">
+  <div><span class="lbl">Tocar agora</span><div id="target">—</div></div>
+  <div><span class="lbl">Ouvindo</span><div id="heard">–</div></div>
+  <div class="meter" aria-hidden="true"><i id="lvl"></i></div>
+</div>
+<div id="msg">Escolha uma nota, ative o microfone e toque a nota marcada em azul. Clique em qualquer nota do braço para ouvir o som.</div>
+
+<script>
+const N=['Dó','Dó#','Ré','Ré#','Mi','Fá','Fá#','Sol','Sol#','Lá','Lá#','Si'];
+const OPEN=[64,59,55,50,45,40]; // 1ª (Mi agudo) até 6ª (Mi grave)
+const FR=12, X0=70, W=56, Y0=30, H=40; // casa 0 = corda solta
+const $=id=>document.getElementById(id), NS='http://www.w3.org/2000/svg';
+let sel=9, mode=1, dir=1, sound=true, queue=[], qi=0, done=new Set();
+// pontuação
+let score=0,streak=0,okN=0,missN=0,times=[],tStart=performance.now(),missed=false,bad=0,lastP=-1;
+const bkey=()=>'mapa-rec-'+(mode===1?sel:'todas')+'-'+dir;
+function best(){try{return +localStorage.getItem(bkey())||0}catch(e){return 0}}
+function stats(){$('sc').textContent=score;$('st').textContent=streak;$('ac').textContent=(okN+missN?Math.round(100*okN/(okN+missN)):100)+'%';$('bs').textContent=best()}
+function resetScore(){score=streak=okN=missN=0;times=[];missed=false;bad=0;tStart=performance.now();stats()}
+function award(){
+  const dt=(performance.now()-tStart)/1000; times.push(dt);
+  const base=missed?50:100, speed=dt<=2?50:dt<=4?30:dt<=6?15:0;
+  streak++; okN++;
+  const mult=1+Math.min(streak-1,10)*0.1, pts=Math.round((base+speed)*mult);
+  score+=pts; missed=false; bad=0; stats();
+  $('msg').textContent=`+${pts} pontos (${base} base + ${speed} velocidade, x${mult.toFixed(1)} sequência)`;
+}
+function miss(){missed=true;missN++;streak=0;score=Math.max(0,score-10);stats();$('msg').textContent='Nota errada (−10 pontos, sequência zerada). Procure a posição azul.'}
+function finish(){
+  const acc=Math.round(100*okN/Math.max(1,okN+missN)), avg=(times.reduce((a,b)=>a+b,0)/Math.max(1,times.length)).toFixed(1);
+  const rec=score>best(); if(rec){try{localStorage.setItem(bkey(),score)}catch(e){}}
+  const txt=`Rodada concluída: ${score} pontos, precisão ${acc}%, tempo médio ${avg}s.`+(rec?' Novo recorde!':'');
+  resetScore(); $('msg').textContent=txt;
+}
+
+// seletor de notas
+N.forEach((n,i)=>{const b=document.createElement('button');b.textContent=n;b.style.marginRight='6px';b.onclick=()=>{sel=i;mode=1;$('m1').classList.add('on');$('m2').classList.remove('on');build()};b.dataset.i=i;$('notes').appendChild(b)});
+function pick(a,b,fn){a.onclick=()=>{fn();a.classList.add('on');b.classList.remove('on');build()}}
+pick($('m1'),$('m2'),()=>mode=1);pick($('m2'),$('m1'),()=>mode=2);
+pick($('d1'),$('d2'),()=>dir=1);pick($('d2'),$('d1'),()=>dir=-1);
+$('snd').onclick=()=>{sound=!sound;$('snd').classList.toggle('on',sound)};
+$('reset').onclick=()=>build();
+
+const px=(f)=>X0+f*W-(f?W/2:W*0.15), py=s=>Y0+s*H;
+function build(){
+  [...$('notes').children].forEach(b=>b.classList.toggle('on',+b.dataset.i===sel));
+  // fila de treino: sempre as posições da nota (uma nota) ou todas
+  const pos=[];
+  const order=[0,1,2,3,4,5]; if(dir===1)order.reverse();
+  order.forEach(s=>{for(let f=0;f<=FR;f++){const p=(OPEN[s]+f)%12; if(mode===2||p===sel)pos.push({s,f,p})}});
+  queue=pos; qi=0; done=new Set(); armed=true; resetScore(); draw();
+}
+const mq=matchMedia('(max-width:640px)'); mq.addEventListener('change',()=>draw());
+function drawV(){
+  const svg=$('neck'); svg.innerHTML=''; svg.setAttribute('viewBox','0 0 370 570'); svg.style.minWidth='0'; svg.style.maxWidth='430px'; svg.style.margin='0 auto';
+  const el=(t,a,p=svg)=>{const e=document.createElementNS(NS,t);for(const k in a)e.setAttribute(k,a[k]);p.appendChild(e);return e};
+  const VX0=58,VW=50,VY0=56,VH=42, X=s=>VX0+(5-s)*VW, Y=f=>f?VY0+f*VH-VH/2:VY0-VH*0.45;
+  el('rect',{x:VX0-24,y:VY0,width:5*VW+48,height:FR*VH,rx:4,fill:'var(--board)'});
+  for(let f=0;f<=FR;f++){const y=VY0+f*VH;el('line',{x1:VX0-24,x2:VX0+5*VW+24,y1:y,y2:y,stroke:'var(--fret)','stroke-width':f===0?5:1.5});
+    const t=el('text',{x:f?12:2,y:Y(f)+4,fill:'var(--mute)','font-size':f?12:10});t.textContent=f||'solta'}
+  [3,5,7,9].forEach(f=>el('circle',{cx:VX0+2.5*VW,cy:Y(f),r:5,fill:'var(--line)'}));
+  el('circle',{cx:VX0+1.5*VW,cy:Y(12),r:5,fill:'var(--line)'});el('circle',{cx:VX0+3.5*VW,cy:Y(12),r:5,fill:'var(--line)'});
+  for(let s=0;s<6;s++){el('line',{x1:X(s),x2:X(s),y1:VY0,y2:VY0+FR*VH,stroke:'var(--fret)','stroke-width':1+s*0.35});
+    const t=el('text',{x:X(s),y:16,'text-anchor':'middle',fill:'var(--mute)','font-size':11});t.textContent=(s+1)+'ª '+N[OPEN[s]%12]}
+  const cur=queue[qi];
+  queue.forEach((q,i)=>{if(mode===1||i===qi||done.has(i)){
+    const isC=i===qi, ok=done.has(i), g=el('g',{class:'nm'});
+    el('circle',{cx:X(q.s),cy:Y(q.f),r:isC?17:14,fill:isC?'var(--cur)':ok?'var(--ok)':'var(--note)',stroke:isC?'#93b4ff':'none','stroke-width':4},g);
+    const t=el('text',{x:X(q.s),y:Y(q.f)+4,'text-anchor':'middle',fill:'#fff','font-size':12,'font-weight':700},g);t.textContent=N[q.p];
+    g.onclick=()=>{if(sound)tone(OPEN[q.s]+q.f)};}});
+  $('target').textContent=cur?`${N[cur.p]} — ${cur.s+1}ª corda, casa ${cur.f||'solta'}  (${qi+1}/${queue.length})`:'—';
+}
+function draw(){mq.matches?drawV():drawH()}
+function drawH(){
+  const svg=$('neck'); svg.innerHTML=''; svg.setAttribute('viewBox','0 0 760 260'); svg.style.minWidth='';svg.style.maxWidth='';svg.style.margin='';
+  const el=(t,a,p=svg)=>{const e=document.createElementNS(NS,t);for(const k in a)e.setAttribute(k,a[k]);p.appendChild(e);return e};
+  el('rect',{x:X0-W*0.15+W*0.15,y:Y0-14,width:FR*W+W*0.0,height:5*H+28,rx:4,fill:'var(--board)'});
+  // casas (trastes)
+  for(let f=0;f<=FR;f++){const x=X0+f*W;el('line',{x1:x,x2:x,y1:Y0-14,y2:Y0+5*H+14,stroke:'var(--fret)','stroke-width':f===0?5:1.5});
+    const t=el('text',{x:px(f)+(f?0:0),y:Y0+5*H+34,'text-anchor':'middle',fill:'var(--mute)','font-size':12});t.textContent=f||'solta'}
+  // marcadores
+  [3,5,7,9].forEach(f=>[1,2,3].forEach(k=>{if(k===2)el('circle',{cx:px(f),cy:Y0+2.5*H,r:5,fill:'var(--line)'})}));
+  el('circle',{cx:px(12)-2,cy:Y0+1.5*H,r:5,fill:'var(--line)'});el('circle',{cx:px(12)-2,cy:Y0+3.5*H,r:5,fill:'var(--line)'});
+  // cordas e nomes
+  for(let s=0;s<6;s++){el('line',{x1:X0,x2:X0+FR*W,y1:py(s),y2:py(s),stroke:'var(--fret)','stroke-width':1+s*0.35});
+    const t=el('text',{x:X0-52,y:py(s)+4,fill:'var(--mute)','font-size':12});t.textContent=(s+1)+'ª '+N[OPEN[s]%12]}
+  // notas
+  const cur=queue[qi];
+  if(mode===1)queue.forEach((q,i)=>mark(q,i));
+  else queue.forEach((q,i)=>{if(i===qi||done.has(i))mark(q,i)});
+  function mark(q,i){
+    const isC=i===qi, ok=done.has(i);
+    const g=el('g',{class:'nm'});
+    el('circle',{cx:px(q.f),cy:py(q.s),r:isC?17:14,fill:isC?'var(--cur)':ok?'var(--ok)':'var(--note)',stroke:isC?'#93b4ff':'none','stroke-width':4},g);
+    const t=el('text',{x:px(q.f),y:py(q.s)+4,'text-anchor':'middle',fill:'#fff','font-size':12,'font-weight':700},g);t.textContent=N[q.p];
+    g.onclick=()=>{if(sound)tone(OPEN[q.s]+q.f)};
+  }
+  $('target').textContent=cur?`${N[cur.p]} — ${cur.s+1}ª corda, casa ${cur.f||'solta'}  (${qi+1}/${queue.length})`:'—';
+}
+
+// som
+let ac; function ctx(){return ac||(ac=new (window.AudioContext||window.webkitAudioContext)())}
+function tone(m){const c=ctx(),o=c.createOscillator(),g=c.createGain();o.type='triangle';o.frequency.value=440*2**((m-69)/12);
+  g.gain.setValueAtTime(.3,c.currentTime);g.gain.exponentialRampToValueAtTime(.001,c.currentTime+1.2);o.connect(g).connect(c.destination);o.start();o.stop(c.currentTime+1.2)}
+
+// microfone + detecção de altura (autocorrelação)
+let an, buf, hits=0, armed=true, prevRms=0, quiet=0, live=false;
+$('mic').onclick=async()=>{
+  if(live)return;
+  if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){$('msg').textContent='Este navegador ou moldura bloqueia o microfone (sem acesso seguro). Abra a página diretamente no Chrome/Safari por https.';return}
+  try{
+    const st=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false}});
+    const c=ctx();await c.resume();const src=c.createMediaStreamSource(st);
+    an=c.createAnalyser();an.fftSize=4096;src.connect(an);buf=new Float32Array(an.fftSize);
+    live=true;calib=[];$('mic').textContent='Microfone ligado';$('mic').classList.add('live');
+        setInterval(listen,50);
+  }catch(e){const n=e&&e.name, why=n==='NotAllowedError'?'Permissão negada. Se a página está aberta dentro de outro app ou moldura (como o Claude), o navegador bloqueia o microfone: abra a página diretamente no navegador, ou hospede o arquivo em https. Também confira a permissão do site.':n==='NotFoundError'?'Nenhum microfone encontrado.':n==='NotReadableError'?'O microfone está em uso por outro app.':'Erro: '+n;$('msg').textContent='Microfone não ativado. '+why}
+};
+let thr=0.012,calib=null,hist=[];
+function rmsOf(b){let s=0;for(let i=0;i<4096;i++)s+=b[i]*b[i];return Math.sqrt(s/4096)}
+function pitch(b,sr,th){
+  const n=4096,rms=rmsOf(b);
+  if(rms<th)return{f:-1,rms,q:0};
+  const maxLag=Math.floor(sr/70), minLag=Math.floor(sr/700), c=new Float32Array(maxLag+2);
+  for(let l=0;l<=maxLag;l++){let s=0;for(let i=0;i<n-l;i++)s+=b[i]*b[i+l];c[l]=s}
+  let d=0;while(d<maxLag&&c[d]>c[d+1])d++;
+  let best=-1;for(let l=Math.max(d,minLag);l<=maxLag;l++)if(c[l]>best)best=c[l];
+  let pos=-1;for(let l=Math.max(d,minLag)+1;l<maxLag;l++)if(c[l]>=best*0.92&&c[l]>=c[l-1]&&c[l]>=c[l+1]){pos=l;break}
+  if(pos<1)return{f:-1,rms,q:0};
+  const q=(c[pos]/c[0])*(n/(n-pos));   // clareza da periodicidade (1 = nota limpa)
+  if(q<0.8)return{f:-1,rms,q};
+  const x1=c[pos-1],x2=c[pos],x3=c[pos+1],a=(x1+x3-2*x2)/2,bb=(x3-x1)/2;
+  let ps=pos; if(a)ps-=bb/(2*a);
+  return{f:sr/ps,rms,q};
+}
+function listen(){
+  an.getFloatTimeDomainData(buf);
+  if(calib){
+    calib.push(rmsOf(buf));
+    if(calib.length>=20){const avg=calib.reduce((x,y)=>x+y,0)/calib.length;thr=Math.min(0.05,Math.max(0.012,avg*3,Math.max(...calib)*1.5));calib=null;$('msg').textContent='Pronto. Toque a nota azul.'}
+    else $('msg').textContent='Calibrando o ruído do ambiente… fique em silêncio por 1 segundo.';
+    return;
+  }
+  const r=pitch(buf,ac.sampleRate,thr);
+  $('lvl').style.width=Math.min(100,r.rms*800)+'%';
+  if(r.rms<thr){quiet++;if(quiet>3)armed=true}else quiet=0;
+  if(r.rms>thr*1.5&&r.rms>prevRms*1.8)armed=true;
+  prevRms=r.rms;
+  if(r.f<0){$('heard').textContent='–';hist=[];return}
+  const mf=69+12*Math.log2(r.f/440), m=Math.round(mf);
+  if(Math.abs(mf-m)*100>40){$('heard').textContent='–';hist=[];return}   // entre duas notas = ruído
+  const p=((m%12)+12)%12;
+  hist.push({p,f:r.f}); if(hist.length>8)hist.shift();
+  const stable=hist.length===8&&hist.every(x=>x.p===p&&Math.abs(x.f/r.f-1)<0.03);
+  $('heard').textContent=stable?N[p]:'…';
+  if(!stable)return;
+  const cur=queue[qi]; if(!cur||!armed)return;
+  if(p===cur.p){award();done.add(qi);qi++;hist=[];armed=false;tStart=performance.now();
+    if(qi>=queue.length){finish();qi=0;done=new Set()}
+    draw()}
+  else if(!missed){miss()}
+}
+build();
+</script>
+</body>
+</html>
